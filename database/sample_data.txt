@@ -1,0 +1,77 @@
+UserID	Username	Email	PasswordHash	FullName	Phone	CreatedAt	LastLogin
+1	chris	chris@example.com	TEMP_HASH_1	Chris	9876543210	2026-11-03 14:19:24	NULL
+2	chiranth	chiranth@example.com	TEMP_HASH_2	Chiranth	9876543211	2026-11-03 14:19:24	NULL
+3	deeksha	deeksha@example.com	TEMP_HASH_3	Deeksha	9876543212	2026-11-03 14:19:24	NULL
+4	janhavi	janhavi@example.com	TEMP_HASH_4	Janhavi	9876543213	2026-11-03 14:19:24	NULL
+5	vivek	vivek@example.com	TEMP_HASH_5	Vivek	9876543214	2026-11-03 14:19:24	NULL
+AccountID	UserID	AccountName	AccountType	Balance	Currency	IsActive	CreatedAt
+1	1	Savings Account	BANK	18000.00	INR	1	2026-11-03 14:20:38
+2	1	Cash Wallet	CASH	2500.00	INR	1	2026-11-03 14:20:38
+3	2	Main Bank Account	BANK	12000.00	INR	1	2026-11-03 14:20:38
+4	2	Daily Wallet	CASH	1500.00	INR	1	2026-11-03 14:20:38
+5	3	Savings Account	BANK	22000.00	INR	1	2026-11-03 14:20:38
+6	3	Cash Wallet	CASH	3000.00	INR	1	2026-11-03 14:20:38
+7	4	College Account	BANK	9000.00	INR	1	2026-11-03 14:20:38
+8	5	Personal Account	BANK	15000.00	INR	1	2026-11-03 14:20:38
+CategoryID	UserID	ParentCategoryID	CategoryName	CategoryType	IconCode	IsSystemDefault
+1	1	NULL	Food	EXPENSE	food	0
+2	1	NULL	Transport	EXPENSE	transport	0
+3	1	NULL	Salary	INCOME	salary	0
+4	2	NULL	Food	EXPENSE	food	0
+5	2	NULL	Shopping	EXPENSE	shopping	0
+6	2	NULL	Salary	INCOME	salary	0
+7	3	NULL	Education	EXPENSE	education	0
+8	3	NULL	Entertainment	EXPENSE	entertainment	0
+9	3	NULL	Salary	INCOME	salary	0
+10	4	NULL	Food	EXPENSE	food	0
+11	4	NULL	Travel	EXPENSE	travel	0
+12	5	NULL	Shopping	EXPENSE	shopping	0
+13	5	NULL	Salary	INCOME	salary	0
+TransactionID	AccountID	CategoryID	Amount	TransactionType	Description	TransactionDate	PaymentMethod	Merchant
+1	1	1	500.00	EXPENSE	Groceries	2026-11-03 14:23:47	UPI	Supermarket
+2	1	2	300.00	EXPENSE	Bus fare	2026-11-03 14:23:47	CASH	Bus
+3	1	3	30000.00	INCOME	Monthly salary	2026-11-03 14:23:47	BANK	Employer
+4	2	1	250.00	EXPENSE	Lunch	2026-11-03 14:23:47	CASH	Cafe
+5	2	2	400.00	EXPENSE	Auto fare	2026-11-03 14:23:47	UPI	Auto
+6	3	4	1500.00	EXPENSE	Clothes	2026-11-03 14:23:47	UPI	Clothing store
+7	3	5	800.00	EXPENSE	Shopping	2026-11-03 14:23:47	CARD	Retail store
+8	4	5	300.00	EXPENSE	Accessories	2026-11-03 14:23:47	CASH	Local shop
+9	4	4	450.00	EXPENSE	Food supplies	2026-11-03 14:23:47	UPI	Grocery store
+10	3	6	40000.00	INCOME	Monthly salary	2026-11-03 14:23:47	BANK	Employer
+11	5	7	2500.00	EXPENSE	College fees	2026-11-03 14:23:47	UPI	College
+12	5	8	800.00	EXPENSE	Movie tickets	2026-11-03 14:23:47	CARD	Cinema
+13	6	7	1200.00	EXPENSE	Study materials	2026-11-03 14:23:47	CASH	Bookstore
+14	5	9	25000.00	INCOME	Monthly income	2026-11-03 14:23:47	BANK	Employer
+15	7	10	600.00	EXPENSE	Groceries	2026-11-03 14:23:47	UPI	Supermarket
+16	7	11	1200.00	EXPENSE	Train ticket	2026-11-03 14:23:47	UPI	Railway
+17	7	10	350.00	EXPENSE	Lunch	2026-11-03 14:23:47	CASH	Cafe
+18	8	12	2000.00	EXPENSE	Shopping	2026-11-03 14:23:47	CARD	Retail store
+19	8	13	35000.00	INCOME	Monthly salary	2026-11-03 14:23:47	BANK	Employer
+20	8	12	900.00	EXPENSE	Cab fare	2026-11-03 14:23:47	UPI	Cab service
+BudgetID	UserID	CategoryID	BudgetAmount	BudgetPeriod	StartDate	EndDate	CreatedAt
+1	1	1	5000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+2	1	2	2000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+3	2	4	4000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+4	2	5	3000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+5	3	7	6000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+6	3	8	2500.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+7	4	10	3000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+8	5	12	4000.00	MONTHLY	2026-11-01	2026-11-30	2026-11-03 14:24:14
+NotificationID	UserID	NotificationType	Message	IsRead	CreatedAt
+1	1	BUDGET_ALERT	You have used 65% of your Food budget.	0	2026-11-03 14:24:31
+2	1	TRANSACTION	Your salary transaction was recorded.	0	2026-11-03 14:24:31
+3	2	BUDGET_ALERT	Your Shopping budget is approaching its limit.	0	2026-11-03 14:24:31
+4	2	TRANSACTION	Your monthly salary was recorded.	0	2026-11-03 14:24:31
+5	3	BUDGET_ALERT	You have used 75% of your Education budget.	0	2026-11-03 14:24:31
+6	3	TRANSACTION	Your college expense was recorded.	0	2026-11-03 14:24:31
+7	4	TRANSACTION	Your train ticket expense was recorded.	0	2026-11-03 14:24:31
+8	5	BUDGET_ALERT	Your Shopping budget is approaching its limit.	0	2026-11-03 14:24:31
+ReportID	UserID	ReportName	ReportType	GeneratedAt	ReportParameters
+1	1	November Expense Report	EXPENSE	2026-11-03 14:24:40	{"month": "2026-11"}
+2	1	November Income Report	INCOME	2026-11-03 14:24:40	{"month": "2026-11"}
+3	2	Monthly Financial Summary	SUMMARY	2026-11-03 14:24:40	{"month": "2026-11"}
+4	2	Shopping Analysis	CATEGORY	2026-11-03 14:24:40	{"category": "Shopping"}
+5	3	Education Expense Report	CATEGORY	2026-11-03 14:24:40	{"category": "Education"}
+6	3	Monthly Financial Summary	SUMMARY	2026-11-03 14:24:40	{"month": "2026-11"}
+7	4	November Expense Report	EXPENSE	2026-11-03 14:24:40	{"month": "2026-11"}
+8	5	November Financial Summary	SUMMARY	2026-11-03 14:24:40	{"month": "2026-11"}

@@ -1,56 +1,106 @@
-# Welcome to your Expo app 👋
+# PennyWise – Personal Finance Management System
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+PennyWise is a Personal Finance Management System developed as a DBMS lab project. It helps users manage accounts, track income and expenses, organize budgets, and view financial reports.
 
-## Get started
+## Technology Stack
 
-1. Install dependencies
+- **Mobile App:** React Native, Expo, TypeScript
+- **Backend:** Python, FastAPI
+- **Database:** MySQL
+- **ORM:** SQLAlchemy
+- **Authentication:** JWT and Argon2 password hashing
 
-   ```bash
-   npm install
-   ```
+## Main Features
 
-2. Start the app
+- User account management
+- Multiple financial accounts
+- Income and expense tracking
+- Transaction categories
+- Budget management
+- Notifications
+- Financial reports and analytics
 
-   ```bash
-   npx expo start
-   ```
+## Project Structure
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+PennyWise/
+├── backend/
+│   ├── main.py
+│   ├── database.py
+│   ├── models.py
+│   └── ... 
+├── database/
+│   ├── schema.sql
+│   └── sample_data.sql
+├── src/
+│   └── app/
+├── package.json
+└── README.md
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+## Database Setup
 
-### Other setup steps
+1. Install MySQL.
+2. Create the database:
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```sql
+CREATE DATABASE PersonalFinanceDB;
+```
 
-## Learn more
+3. Import the schema:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+mysql -u YOUR_MYSQL_USER -p PersonalFinanceDB < database/schema.sql
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+4. Import the sample data after valid demo password hashes have been added:
 
-## Join the community
+```bash
+mysql -u YOUR_MYSQL_USER -p PersonalFinanceDB < database/sample_data.sql
+```
 
-Join our community of developers creating universal apps.
+## Backend Setup
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install fastapi "uvicorn[standard]" sqlalchemy pymysql python-dotenv passlib argon2-cffi python-jose
+```
+
+Create a `.env` file in `backend/` with your own database connection and JWT secret:
+
+```env
+DATABASE_URL=mysql+pymysql://YOUR_USER:YOUR_PASSWORD@127.0.0.1:3306/PersonalFinanceDB
+JWT_SECRET=YOUR_LONG_RANDOM_SECRET
+```
+
+Start the backend:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+API documentation: `http://127.0.0.1:8000/docs`
+
+## Mobile App Setup
+
+From the project root:
+
+```bash
+npm install
+npx expo start
+```
+
+Scan the QR code using Expo Go.
+
+## Security Notes
+
+- Never commit `.env` files or database credentials.
+- Use valid Argon2 password hashes for demo users.
+- Enforce user-specific authorization on all API endpoints before deployment.
+- Do not expose real personal or financial records in public repositories.
+
+## Project Status
+
+PennyWise includes the mobile app structure, FastAPI backend, and MySQL database schema with sample records. Authentication, authorization, and full mobile-to-backend integration are planned development steps.
