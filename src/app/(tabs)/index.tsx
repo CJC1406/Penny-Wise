@@ -1,5 +1,6 @@
-import React from 'react';
-import { useRouter } from 'expo-router';
+import { getSummary, getTransactions, getCurrentUser, type Transaction } from "@/services/api";
+import React, { useEffect, useState } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import {
   ScrollView,
   StyleSheet,
@@ -9,14 +10,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const transactions = [
-  { title: 'Grocery shopping', category: 'Food & Groceries', amount: '-₹850', date: 'Today', icon: 'G' },
-  { title: 'Monthly stipend', category: 'Income', amount: '+₹8,000', date: 'Yesterday', icon: 'I' },
-  { title: 'Bus pass', category: 'Transport', amount: '-₹450', date: 'Yesterday', icon: 'T' },
-];
-
 export default function HomeScreen() {
   const router = useRouter();
+
+  const [backendStatus, setBackendStatus] = useState("Checking...");
+  const [summary, setSummary] = useState({ balance: 0, income: 0, expenses: 0, accounts: 0 });
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [name, setName] = useState("there");
+
+  const refreshDashboard = React.useCallback(() => {
+    Promise.all([getSummary(), getTransactions(), getCurrentUser()]).then(([s, t, u]) => { setSummary(s); setTransactions(t); setName(u.FullName || u.Username); setBackendStatus("Connected"); }).catch(() => setBackendStatus("Disconnected"));
+  }, []);
+  useFocusEffect(React.useCallback(() => { refreshDashboard(); }, [refreshDashboard]));
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
@@ -25,9 +30,12 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>GOOD MORNING</Text>
-            <Text style={styles.username}>Hello, CJ</Text>
+            <Text style={styles.username}>Hello, {name}</Text>
+            <Text style={{ color: backendStatus === "Connected" ? "green" : "red" }}>
+            Backend: {backendStatus}
+            </Text>
           </View>
-          <TouchableOpacity style={styles.profileButton}>
+          <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Open profile">
             <Text style={styles.profileInitial}>C</Text>
           </TouchableOpacity>
         </View>
@@ -35,7 +43,7 @@ export default function HomeScreen() {
         {/* Balance Card */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
-          <Text style={styles.balanceAmount}>₹24,500.00</Text>
+          <Text style={styles.balanceAmount}>₹{Number(summary.balance).toLocaleString('en-IN', {minimumFractionDigits: 2})}</Text>
           <Text style={styles.balanceNote}>Across all your accounts</Text>
 
           <View style={styles.balanceDivider} />
@@ -43,11 +51,11 @@ export default function HomeScreen() {
           <View style={styles.balanceActions}>
             <View>
               <Text style={styles.whiteMuted}>INCOME</Text>
-              <Text style={styles.balanceSmall}>+ ₹30,000</Text>
+              <Text style={styles.balanceSmall}>+ ₹{Number(summary.income).toLocaleString('en-IN')}</Text>
             </View>
             <View>
               <Text style={styles.whiteMuted}>EXPENSES</Text>
-              <Text style={styles.balanceSmall}>- ₹5,500</Text>
+              <Text style={styles.balanceSmall}>- ₹{Number(summary.expenses).toLocaleString('en-IN')}</Text>
             </View>
           </View>
         </View>
@@ -97,10 +105,10 @@ export default function HomeScreen() {
           <View style={styles.spendingTop}>
             <View>
               <Text style={styles.mutedText}>Total spent</Text>
-              <Text style={styles.spentAmount}>₹5,500</Text>
+            <Text style={styles.spentAmount}>₹{Number(summary.expenses).toLocaleString('en-IN')}</Text>
             </View>
             <View style={styles.budgetBadge}>
-              <Text style={styles.budgetBadgeText}>22% used</Text>
+              <Text style={styles.budgetBadgeText}>This month</Text>
             </View>
           </View>
 
@@ -109,8 +117,8 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.budgetFooter}>
-            <Text style={styles.mutedText}>Budget: ₹25,000</Text>
-            <Text style={styles.remainingText}>₹19,500 left</Text>
+            <Text style={styles.mutedText}>{summary.accounts} accounts</Text>
+            <Text style={styles.remainingText}>Live balance</Text>
           </View>
         </View>
 
@@ -123,32 +131,32 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.transactionCard}>
-          {transactions.map((item, index) => (
+          {transactions.slice(0, 5).map((item, index) => (
             <View
-              key={item.title}
+              key={item.TransactionID}
               style={[
                 styles.transactionRow,
                 index !== transactions.length - 1 && styles.transactionBorder,
               ]}
             >
               <View style={styles.transactionIcon}>
-                <Text style={styles.transactionIconText}>{item.icon}</Text>
+                <Text style={styles.transactionIconText}>{item.TransactionType === 'INCOME' ? 'I' : 'E'}</Text>
               </View>
 
               <View style={styles.transactionDetails}>
-                <Text style={styles.transactionTitle}>{item.title}</Text>
+                <Text style={styles.transactionTitle}>{item.Description || item.TransactionType}</Text>
                 <Text style={styles.transactionCategory}>
-                  {item.category} · {item.date}
+                  {item.TransactionType} · {item.TransactionDate ? new Date(item.TransactionDate).toLocaleDateString() : ''}
                 </Text>
               </View>
 
               <Text
                 style={[
                   styles.transactionAmount,
-                  item.amount.startsWith('+') && styles.incomeAmount,
+                  item.TransactionType === 'INCOME' && styles.incomeAmount,
                 ]}
               >
-                {item.amount}
+                {item.TransactionType === 'INCOME' ? '+' : '-'} ₹{Number(item.Amount).toLocaleString('en-IN')}
               </Text>
             </View>
           ))}

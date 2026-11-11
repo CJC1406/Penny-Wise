@@ -1,3 +1,4 @@
+
 import {
   DarkTheme,
   DefaultTheme,
@@ -10,7 +11,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 
 SplashScreen.preventAutoHideAsync();
-
+export const unstable_settings = {
+  initialRouteName: 'login',
+};
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -20,10 +23,15 @@ export default function RootLayout() {
         value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
       >
         <AnimatedSplashOverlay />
-        <Stack screenOptions={{ headerShown: false }}>
+
+        <Stack
+          screenOptions={{ headerShown: false }}
+        >
+          <Stack.Screen name="login" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="budgets" />
           <Stack.Screen name="analytics" />
+          <Stack.Screen name="profile" />
         </Stack>
       </ThemeProvider>
     </SafeAreaProvider>

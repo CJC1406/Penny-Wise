@@ -53,6 +53,9 @@ CREATE DATABASE PersonalFinanceDB;
 mysql -u YOUR_MYSQL_USER -p PersonalFinanceDB < database/schema.sql
 ```
 
+For an existing database, do not re-import or recreate the schema. Back it up and
+apply the additive scripts in `database/migrations/` in order.
+
 4. Import the sample data after valid demo password hashes have been added:
 
 ```bash

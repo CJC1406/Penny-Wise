@@ -2,28 +2,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-
-const expenses = [
-  { name: 'Food', amount: 3200, color: '#268653' },
-  { name: 'Transport', amount: 850, color: '#D69A36' },
-  { name: 'Shopping', amount: 3100, color: '#5985C5' },
-  { name: 'Education', amount: 2500, color: '#9A75C5' },
-  { name: 'Entertainment', amount: 900, color: '#D47777' },
-];
-
-const income = 30000;
-const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
-const savings = income - totalExpenses;
+import { getTransactions } from '@/services/api';
 
 const money = (value: number) =>
   '₹' + value.toLocaleString('en-IN');
 
 export default function AnalyticsScreen() {
+  const [expenses, setExpenses] = React.useState<{name: string; amount: number; color: string}[]>([]);
+  const [income, setIncome] = React.useState(0);
+  React.useEffect(() => { getTransactions().then((items) => { setIncome(items.filter((x) => x.TransactionType === 'INCOME').reduce((s, x) => s + Number(x.Amount), 0)); setExpenses(items.filter((x) => x.TransactionType === 'EXPENSE').map((x) => ({ name: x.Description || 'Expense', amount: Number(x.Amount), color: '#268653' }))); }).catch(() => undefined); }, []);
+  const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
+  const savings = income - totalExpenses;
   const maxExpense = Math.max(...expenses.map(item => item.amount));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7F5' }} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F7F5" />
+      <StatusBar barStyle="dark-content" />
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={styles.heading}>Analytics</Text>
       <Text style={styles.subtitle}>Understand your financial habits</Text>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { getBudgets } from '@/services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import {
@@ -18,14 +19,6 @@ type Budget = {
   spent: number;
 };
 
-const initialBudgets: Budget[] = [
-  { id: 1, category: 'Food', limit: 5000, spent: 3200 },
-  { id: 2, category: 'Transport', limit: 2000, spent: 850 },
-  { id: 3, category: 'Shopping', limit: 4000, spent: 3100 },
-  { id: 4, category: 'Education', limit: 6000, spent: 2500 },
-  { id: 5, category: 'Entertainment', limit: 2000, spent: 900 },
-];
-
 const categories = [
   'Food',
   'Transport',
@@ -38,10 +31,12 @@ const categories = [
 ];
 
 export default function BudgetsScreen() {
-  const [budgets, setBudgets] = useState(initialBudgets);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [category, setCategory] = useState('Food');
   const [limit, setLimit] = useState('');
+
+  React.useEffect(() => { getBudgets().then((items: any[]) => { if (items.length) setBudgets(items.map((b) => ({ id: b.BudgetID, category: String(b.CategoryID), limit: Number(b.BudgetAmount), spent: 0 }))); }).catch(() => undefined); }, []);
 
   const totals = useMemo(() => {
     const budgeted = budgets.reduce((sum, item) => sum + item.limit, 0);
@@ -107,7 +102,7 @@ export default function BudgetsScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7F5' }} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F7F5" />
+      <StatusBar barStyle="dark-content" />
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <View>

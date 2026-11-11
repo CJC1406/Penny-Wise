@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createAccount, getAccounts, type Account } from '@/services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'react-native';
 import {
   View,
@@ -11,58 +13,26 @@ import {
   Alert,
 } from 'react-native';
 
-type Account = {
-  id: number;
-  name: string;
-  type: string;
-  balance: number;
-};
-
-const initialAccounts: Account[] = [
-  { id: 1, name: 'Savings Account', type: 'Bank Account', balance: 18000 },
-  { id: 2, name: 'Cash Wallet', type: 'Cash', balance: 2500 },
-  { id: 3, name: 'Checking Account', type: 'Current Account', balance: 4000 },
-];
-
 export default function AccountsScreen() {
-  const [accounts, setAccounts] = useState(initialAccounts);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState('Bank Account');
-  const [balance, setBalance] = useState('');
+  const refreshAccounts = React.useCallback(() => { getAccounts().then(setAccounts).catch(() => Alert.alert('Error', 'Unable to load accounts.')); }, []);
+  useFocusEffect(React.useCallback(() => { refreshAccounts(); }, [refreshAccounts]));
 
   const totalBalance = accounts.reduce(
-    (total, account) => total + account.balance,
+    (total, account) => total + Number(account.Balance || 0),
     0
   );
 
   const addAccount = () => {
-    const amount = Number(balance);
-
     if (!name.trim()) {
       Alert.alert('Missing name', 'Enter an account name.');
       return;
     }
 
-    if (!balance.trim() || !Number.isFinite(amount) || amount < 0) {
-      Alert.alert('Invalid balance', 'Enter a valid balance of 0 or more.');
-      return;
-    }
-
-    setAccounts([
-      ...accounts,
-      {
-        id: Date.now(),
-        name: name.trim(),
-        type,
-        balance: amount,
-      },
-    ]);
-
-    setName('');
-    setBalance('');
-    setType('Bank Account');
-    setShowForm(false);
+    createAccount({ AccountName: name.trim(), AccountType: type }).then((result: any) => { setAccounts(current => [...current, result.account]); setName(''); setType('Bank Account'); setShowForm(false); }).catch((e) => Alert.alert('Error', e.message));
   };
 
   const formatMoney = (amount: number) =>
@@ -73,7 +43,7 @@ export default function AccountsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F7F5" />
+      <StatusBar barStyle="dark-content" />
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <View>
@@ -99,21 +69,24 @@ export default function AccountsScreen() {
       </View>
 
       {accounts.map((account, index) => (
-        <View style={styles.accountCard} key={account.id}>
+        <View style={styles.accountCard} key={account.AccountID}>
           <View style={styles.accountIcon}>
             <Text style={styles.accountIconText}>
-              {account.type === 'Cash' ? '₹' : account.type === 'Current Account' ? 'C' : 'S'}
+              {account.AccountType === 'Cash' ? '₹' : account.AccountType === 'Current Account' ? 'C' : 'S'}
             </Text>
           </View>
 
           <View style={styles.accountDetails}>
-            <Text style={styles.accountName}>{account.name}</Text>
-            <Text style={styles.accountType}>{account.type}</Text>
+          <Text style={styles.accountName}>{account.AccountName}</Text>
+            <Text style={styles.accountType}>{account.AccountType}</Text>
           </View>
 
           <Text style={styles.accountBalance}>
-            {formatMoney(account.balance)}
+            {formatMoney(Number(account.Balance))}
           </Text>
+          <TouchableOpacity onPress={() => router.push('/explore?type=income')}>
+            <Text style={styles.addMoney}>Add income</Text>
+          </TouchableOpacity>
         </View>
       ))}
 
@@ -145,15 +118,8 @@ export default function AccountsScreen() {
             ))}
           </View>
 
-          <Text style={styles.fieldLabel}>Current balance (₹)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter balance"
-            placeholderTextColor="#A0AAA3"
-            keyboardType="decimal-pad"
-            value={balance}
-            onChangeText={setBalance}
-          />
+          <Text style={styles.fieldLabel}>Opening balance</Text>
+          <Text style={styles.accountType}>New accounts always start at ₹0.00. Record income to add money.</Text>
 
           <TouchableOpacity style={styles.saveButton} onPress={addAccount}>
             <Text style={styles.saveText}>Save account</Text>
@@ -208,6 +174,7 @@ const styles = StyleSheet.create({
   accountName: { color: '#25332A', fontSize: 13, fontWeight: '700' },
   accountType: { color: '#89958E', fontSize: 10, marginTop: 5 },
   accountBalance: { color: '#25332A', fontSize: 13, fontWeight: '700' },
+  addMoney: { color: '#176B45', fontSize: 11, fontWeight: '700', marginTop: 5 },
   addButton: { backgroundColor: '#176B45', padding: 16, borderRadius: 15, alignItems: 'center', marginTop: 10 },
   addButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   form: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 18, marginTop: 12 },

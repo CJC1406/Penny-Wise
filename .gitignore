@@ -76,3 +76,7 @@ backend/**/*.pyc
 .claude/
 .vscode/
 AGENTS.md
+
+# Private sample data
+database/sample_data.sql
+database/sample_data.txt

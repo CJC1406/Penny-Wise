@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { createCategory, createTransaction, getAccounts, getCategories, getTransactions, type Transaction as ApiTransaction, type Account, type Category } from '@/services/api';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
   Alert,
   ScrollView,
@@ -20,14 +21,6 @@ type Transaction = {
   type: 'income' | 'expense';
 };
 
-const initialTransactions: Transaction[] = [
-  { id: '1', title: 'Grocery shopping', category: 'Food', date: 'Today', amount: 850, type: 'expense' },
-  { id: '2', title: 'Monthly stipend', category: 'Income', date: 'Yesterday', amount: 8000, type: 'income' },
-  { id: '3', title: 'Bus pass', category: 'Transport', date: 'Yesterday', amount: 450, type: 'expense' },
-  { id: '4', title: 'Electricity bill', category: 'Utilities', date: '2 Nov 2026', amount: 1200, type: 'expense' },
-  { id: '5', title: 'Freelance payment', category: 'Income', date: '1 Nov 2026', amount: 5000, type: 'income' },
-];
-
 const categories = [
   'Food',
   'Transport',
@@ -42,13 +35,18 @@ const categories = [
 export default function TransactionsScreen() {
   const params = useLocalSearchParams<{ type?: string }>();
 
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filter, setFilter] = useState<'All' | 'Income' | 'Expenses'>('All');
   const [showForm, setShowForm] = useState(false);
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Food');
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [backendCategories, setBackendCategories] = useState<Category[]>([]);
+
+  const refreshFinancialData = React.useCallback(() => { Promise.all([getTransactions(), getAccounts(), getCategories()]).then(([items, loadedAccounts, loadedCategories]) => { setTransactions((items as ApiTransaction[]).map((item) => ({ id: String(item.TransactionID), title: item.Description || item.TransactionType, category: item.TransactionType, date: item.TransactionDate ? new Date(item.TransactionDate).toLocaleDateString() : '', amount: Number(item.Amount), type: item.TransactionType === 'INCOME' ? 'income' : 'expense' }))); setAccounts(loadedAccounts); setBackendCategories(loadedCategories); }).catch(() => Alert.alert('Error', 'Unable to load financial data.')); }, []);
+  useFocusEffect(React.useCallback(() => { refreshFinancialData(); }, [refreshFinancialData]));
 
   useEffect(() => {
     const requestedType = params.type?.toLowerCase();
@@ -75,7 +73,7 @@ export default function TransactionsScreen() {
     return true;
   });
 
-  function saveTransaction() {
+  async function saveTransaction() {
     const value = Number(amount);
 
     if (!description.trim()) {
@@ -88,16 +86,20 @@ export default function TransactionsScreen() {
       return;
     }
 
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
-      title: description.trim(),
-      category: type === 'income' ? 'Income' : category,
-      date: 'Today',
-      amount: value,
-      type,
-    };
-
-    setTransactions(previous => [newTransaction, ...previous]);
+    const account = accounts[0];
+    const transactionType = type === 'income' ? 'INCOME' : 'EXPENSE';
+    if (!account) { Alert.alert('Setup required', 'Create an account before recording a transaction.'); return; }
+    try {
+      let matchingCategory = backendCategories.find((item) => item.CategoryType === transactionType && (type === 'income' || item.CategoryName.toLowerCase() === category.toLowerCase()))
+        ?? backendCategories.find((item) => item.CategoryType === transactionType);
+      if (!matchingCategory) {
+        matchingCategory = await createCategory({ CategoryName: type === 'income' ? 'Income' : category, CategoryType: transactionType });
+        setBackendCategories((current) => [...current, matchingCategory!]);
+      }
+      await createTransaction({ AccountID: account.AccountID, CategoryID: matchingCategory.CategoryID, Amount: value, TransactionType: transactionType, Description: description.trim() });
+      const refreshed = await getTransactions();
+      setTransactions(refreshed.map((item) => ({ id: String(item.TransactionID), title: item.Description || item.TransactionType, category: item.TransactionType, date: item.TransactionDate ? new Date(item.TransactionDate).toLocaleDateString() : '', amount: Number(item.Amount), type: item.TransactionType === 'INCOME' ? 'income' : 'expense' })));
+    } catch (e) { Alert.alert('Could not save transaction', e instanceof Error ? e.message : 'Try again.'); return; }
     setAmount('');
     setDescription('');
     setCategory('Food');
