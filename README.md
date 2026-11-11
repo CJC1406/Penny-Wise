@@ -104,6 +104,29 @@ Scan the QR code using Expo Go.
 - Enforce user-specific authorization on all API endpoints before deployment.
 - Do not expose real personal or financial records in public repositories.
 
-## Project Status
+## DBMS Properties Used in PennyWise
 
-PennyWise includes the mobile app structure, FastAPI backend, and MySQL database schema with sample records. Authentication, authorization, and full mobile-to-backend integration are planned development steps.
+PennyWise uses the four ACID properties of database transactions to maintain the accuracy, consistency, and reliability of financial records.
+
+### 1. Atomicity
+Atomicity ensures that a database operation is completed fully or not performed at all.
+
+In PennyWise, recording an income or expense involves inserting a transaction record and updating the corresponding account balance. These operations should be handled as a single database transaction so that a failure does not leave the transaction history and account balance inconsistent.
+
+### 2. Consistency
+Consistency ensures that database operations preserve the integrity of the data.
+
+PennyWise uses primary keys, foreign keys, data types, constraints, and application-level validation to maintain valid relationships between users, accounts, categories, transactions, and budgets.
+
+### 3. Isolation
+Isolation ensures that concurrent database operations do not produce incorrect results.
+
+When multiple requests access or update account balances simultaneously, appropriate transaction isolation and locking help prevent conflicting updates and incorrect balance calculations.
+
+### 4. Durability
+Durability ensures that committed database changes are permanently stored.
+
+PennyWise uses MySQL to persist user information, account details, transactions, budgets, notifications, and reports. Committed records remain stored even after the application or database connection is closed.
+
+### Conclusion
+The ACID properties are important in PennyWise because financial applications require reliable transaction processing and accurate account balances. These properties help protect financial records and maintain database integrity.
