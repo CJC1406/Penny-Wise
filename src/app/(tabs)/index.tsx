@@ -36,7 +36,7 @@ export default function HomeScreen() {
             </Text>
           </View>
           <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Open profile">
-            <Text style={styles.profileInitial}>C</Text>
+            <Text style={styles.profileInitial}>{name.charAt(0).toUpperCase()}</Text>
           </TouchableOpacity>
         </View>
 
@@ -61,7 +61,11 @@ export default function HomeScreen() {
         </View>
 
         {/* Quick Actions */}
-        <View style={styles.quickActions}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickActions}
+        >
           <TouchableOpacity style={styles.actionItem}
               onPress={() => router.push('/explore?type=expense')}>
             <View style={styles.actionIcon}>
@@ -93,7 +97,21 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.actionText}>Analytics</Text>
           </TouchableOpacity>
-        </View>
+          <TouchableOpacity style={styles.actionItem}
+              onPress={() => router.push('/accounts')}>
+            <View style={styles.actionIcon}>
+              <Text style={styles.actionSymbol}>₹</Text>
+            </View>
+            <Text style={styles.actionText}>My accounts</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionItem}
+              onPress={() => router.push('/profile')}>
+            <View style={styles.actionIcon}>
+              <Text style={styles.actionSymbol}>{name.charAt(0).toUpperCase()}</Text>
+            </View>
+            <Text style={styles.actionText}>Profile</Text>
+          </TouchableOpacity>
+        </ScrollView>
 
         {/* Monthly Spending */}
         <View style={styles.sectionHeader}>
@@ -125,7 +143,7 @@ export default function HomeScreen() {
         {/* Recent Transactions */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent transactions</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/explore')} accessibilityRole="button" accessibilityLabel="See all transactions">
             <Text style={styles.seeAll}>See all</Text>
           </TouchableOpacity>
         </View>
@@ -253,14 +271,14 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
   quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 14,
     marginTop: 27,
     marginBottom: 30,
+    paddingRight: 18,
   },
   actionItem: {
     alignItems: 'center',
-    width: '23%',
+    width: 76,
   },
   actionIcon: {
     width: 53,

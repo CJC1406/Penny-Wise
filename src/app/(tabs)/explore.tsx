@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createCategory, createTransaction, getAccounts, getCategories, getTransactions, type Transaction as ApiTransaction, type Account, type Category } from '@/services/api';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { createCategory, createTransaction, deleteTransaction, getAccounts, getCategories, getTransactions, type Transaction as ApiTransaction, type Account, type Category } from '@/services/api';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
   Alert,
   ScrollView,
@@ -52,8 +52,8 @@ export default function TransactionsScreen() {
     const requestedType = params.type?.toLowerCase();
 
     if (requestedType === 'income' || requestedType === 'expense') {
-      setType(requestedType);
-      setShowForm(true);
+      const handle = setTimeout(() => { setType(requestedType); setShowForm(true); }, 0);
+      return () => clearTimeout(handle);
     }
   }, [params.type]);
 
@@ -213,7 +213,7 @@ export default function TransactionsScreen() {
         )}
 
         <View style={styles.filterRow}>
-          <Text style={styles.sectionTitle}>All transactions</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={styles.sectionTitle}>All transactions</Text><TouchableOpacity onPress={() => router.push('/search' as any)}><Text style={{ color: '#176B45', fontWeight: '700' }}>Advanced search</Text></TouchableOpacity></View>
         </View>
 
         <View style={styles.filters}>
@@ -259,6 +259,9 @@ export default function TransactionsScreen() {
               ]}>
                 {item.type === 'income' ? '+' : '-'}₹{item.amount.toLocaleString('en-IN')}
               </Text>
+              <TouchableOpacity style={styles.deleteButton} onPress={() => Alert.alert('Delete transaction?', 'The account balance will be updated.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteTransaction(Number(item.id)); refreshFinancialData(); } catch (e) { Alert.alert('Error', e instanceof Error ? e.message : 'Unable to delete transaction.'); } } }])}>
+                <Text style={styles.deleteText}>×</Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -344,6 +347,8 @@ const styles = StyleSheet.create({
   transactionTitle: { color: '#25332A', fontSize: 13, fontWeight: '700' },
   categoryText: { color: '#89958E', fontSize: 10, marginTop: 5 },
   transactionAmount: { color: '#25332A', fontSize: 13, fontWeight: '700' },
+  deleteButton: { marginLeft: 10, padding: 4 },
+  deleteText: { color: '#B42318', fontSize: 20, fontWeight: '700' },
   emptyState: { padding: 30, alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 17 },
   emptyText: { color: '#89958E', fontSize: 13 },
   footer: { color: '#A0AAA3', fontSize: 11, textAlign: 'center', marginTop: 25 },

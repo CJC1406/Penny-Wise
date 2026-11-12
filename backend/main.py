@@ -1,6 +1,6 @@
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -11,6 +11,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import text, func, and_
 
 from database import get_db
 from models import User
@@ -20,6 +21,11 @@ from transaction_models import Transaction
 from budget_models import Budget
 from notification_models import Notification
 from report_models import Report
+from finance_extension_models import Transfer
+from finance_extension_models import SavingsGoal, GoalContribution, RecurringTransaction
+from mongo_store import mongo_enabled, upsert_transaction, delete_transaction as mongo_delete_transaction
+from mongo_store import add_notification as mongo_add_notification, list_notifications as mongo_list_notifications
+from mongo_store import mark_notification_read as mongo_mark_notification_read, search_transactions as mongo_search_transactions
 
 
 # --------------------------------------------------
@@ -106,6 +112,53 @@ class TransactionUpdate(BaseModel):
     TransactionDate: Optional[datetime] = None
     PaymentMethod: Optional[str] = None
     Merchant: Optional[str] = None
+
+
+class TransferCreate(BaseModel):
+    SourceAccountID: int
+    DestinationAccountID: int
+    Amount: Decimal = Field(gt=0)
+    Description: Optional[str] = None
+    TransferDate: Optional[datetime] = None
+
+
+class BudgetCreate(BaseModel):
+    CategoryID: int
+    BudgetAmount: Decimal = Field(gt=0)
+    BudgetPeriod: str = "MONTHLY"
+    StartDate: date
+    EndDate: date
+
+
+class SavingsGoalCreate(BaseModel):
+    GoalName: str
+    TargetAmount: Decimal = Field(gt=0)
+    Deadline: Optional[date] = None
+
+
+class GoalContributionCreate(BaseModel):
+    Amount: Decimal = Field(gt=0)
+    Note: Optional[str] = None
+
+
+class RecurringTransactionCreate(BaseModel):
+    AccountID: int
+    CategoryID: int
+    Amount: Decimal = Field(gt=0)
+    TransactionType: str
+    Frequency: str = "MONTHLY"
+    NextExecutionDate: date
+    Description: Optional[str] = None
+
+
+class TransactionSearchParams(BaseModel):
+    CategoryID: Optional[int] = None
+    AccountID: Optional[int] = None
+    TransactionType: Optional[str] = None
+    StartDate: Optional[datetime] = None
+    EndDate: Optional[datetime] = None
+    MinAmount: Optional[Decimal] = Field(default=None, ge=0)
+    MaxAmount: Optional[Decimal] = Field(default=None, ge=0)
 
 
 # --------------------------------------------------
@@ -240,6 +293,45 @@ def transaction_response(transaction):
         "PaymentMethod": transaction.PaymentMethod,
         "Merchant": transaction.Merchant
     }
+
+
+def create_budget_alerts(db, user_id, category_id, transaction_date):
+    """Create one alert per threshold for the active budget period."""
+    budgets = db.query(Budget).filter(
+        Budget.UserID == user_id,
+        Budget.CategoryID == category_id,
+        Budget.StartDate <= transaction_date.date(),
+        Budget.EndDate >= transaction_date.date(),
+    ).all()
+    category = db.query(Category).filter(Category.CategoryID == category_id).first()
+    for budget in budgets:
+        spent = db.query(func.coalesce(func.sum(Transaction.Amount), 0)).join(
+            Account, Transaction.AccountID == Account.AccountID
+        ).filter(
+            Account.UserID == user_id,
+            Transaction.CategoryID == category_id,
+            Transaction.TransactionType == "EXPENSE",
+            Transaction.TransactionDate >= budget.StartDate,
+            Transaction.TransactionDate < datetime.combine(budget.EndDate, datetime.max.time()),
+        ).scalar()
+        spent = Decimal(str(spent or 0))
+        budget_amount = Decimal(str(budget.BudgetAmount))
+        ratio = spent / budget_amount if budget_amount else Decimal("0")
+        for threshold, cutoff in ((75, Decimal("0.75")), (90, Decimal("0.9")), (100, Decimal("1"))):
+            if ratio < cutoff:
+                continue
+            existing = db.query(Notification).filter(
+                Notification.UserID == user_id,
+                Notification.NotificationType == f"BUDGET_{threshold}",
+                Notification.Message.like(f"%{category.CategoryName}%"),
+                Notification.CreatedAt >= datetime.combine(budget.StartDate, datetime.min.time()),
+            ).first()
+            if not existing:
+                over = max(spent - budget_amount, Decimal("0"))
+                message = (f"You have exceeded your {category.CategoryName} budget by ₹{over:.2f}." if threshold == 100
+                           else f"You have used {spent / budget_amount:.0%} of your {category.CategoryName} budget.")
+                if not mongo_add_notification(user_id, f"BUDGET_{threshold}", category.CategoryName, budget, spent, message):
+                    db.add(Notification(UserID=user_id, NotificationType=f"BUDGET_{threshold}", Message=message, IsRead=False))
 
 
 # --------------------------------------------------
@@ -534,10 +626,30 @@ def create_category(
 
 @app.get("/transactions")
 def get_transactions(
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    account_id: Optional[int] = None,
+    transaction_type: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    min_amount: Optional[Decimal] = None,
+    max_amount: Optional[Decimal] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_database)
 ):
-    return (
+    filters = {"category_id": category_id, "account_id": account_id, "transaction_type": transaction_type.upper() if transaction_type else None, "start_date": start_date, "end_date": end_date, "min_amount": min_amount, "max_amount": max_amount, "text": search}
+    if any(value is not None for value in filters.values()) and mongo_enabled():
+        seed_rows = (db.query(Transaction, Category, Account)
+                     .join(Account, Transaction.AccountID == Account.AccountID)
+                     .join(Category, Transaction.CategoryID == Category.CategoryID)
+                     .filter(Account.UserID == current_user.UserID, Category.UserID == current_user.UserID)
+                     .all())
+        for transaction, category, account in seed_rows:
+            upsert_transaction(transaction, current_user.UserID, category.CategoryName, account.AccountName)
+        rows = mongo_search_transactions(current_user.UserID, filters)
+        if rows is not None:
+            return {"transactions": rows, "total": sum(row["amount"] for row in rows if row["transaction_type"] == "EXPENSE"), "count": len(rows)}
+    query = (
         db.query(Transaction)
         .join(
             Account,
@@ -551,9 +663,17 @@ def get_transactions(
             Account.UserID == current_user.UserID,
             Category.UserID == current_user.UserID
         )
-        .order_by(Transaction.TransactionDate.desc())
-        .all()
     )
+    if category_id is not None: query = query.filter(Transaction.CategoryID == category_id)
+    if account_id is not None: query = query.filter(Transaction.AccountID == account_id)
+    if transaction_type: query = query.filter(Transaction.TransactionType == transaction_type.upper())
+    if search: query = query.filter((Transaction.Description.like(f"%{search}%")) | (Transaction.Merchant.like(f"%{search}%")))
+    if start_date: query = query.filter(Transaction.TransactionDate >= start_date)
+    if end_date: query = query.filter(Transaction.TransactionDate <= end_date)
+    if min_amount is not None: query = query.filter(Transaction.Amount >= min_amount)
+    if max_amount is not None: query = query.filter(Transaction.Amount <= max_amount)
+    items = query.order_by(Transaction.TransactionDate.desc()).all()
+    return {"transactions": items, "total": sum((Decimal(str(t.Amount)) for t in items if t.TransactionType == "EXPENSE"), Decimal("0")), "count": len(items)} if any(v is not None for v in filters.values()) else items
 
 
 @app.get("/summary")
@@ -568,6 +688,83 @@ def get_summary(
     expenses = sum((Decimal(str(t.Amount)) for t in transactions if t.TransactionType == "EXPENSE"), Decimal("0"))
     balance = sum((Decimal(str(a.Balance or 0)) for a in accounts), Decimal("0"))
     return {"balance": balance, "income": income, "expenses": expenses, "accounts": len(accounts)}
+
+
+@app.get("/reconciliation")
+def get_reconciliation(month: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    try:
+        month_date = datetime.strptime(month, "%Y-%m").date().replace(day=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="month must use YYYY-MM format")
+    query = text("""
+        SELECT a.AccountID, a.AccountName, a.Balance AS ActualBalance,
+               a.OpeningBalance,
+               a.OpeningBalance + COALESCE(SUM(CASE WHEN t.TransactionType = 'INCOME' THEN t.Amount ELSE -t.Amount END), 0) AS ExpectedBalance,
+               a.Balance - (a.OpeningBalance + COALESCE(SUM(CASE WHEN t.TransactionType = 'INCOME' THEN t.Amount ELSE -t.Amount END), 0)) AS Difference
+        FROM Accounts a
+        LEFT JOIN Transactions t ON t.AccountID = a.AccountID
+          AND t.TransactionDate < DATE_ADD(:month_start, INTERVAL 1 MONTH)
+        WHERE a.UserID = :user_id AND a.IsActive = 1
+        GROUP BY a.AccountID, a.AccountName, a.Balance, a.OpeningBalance
+        ORDER BY a.AccountName
+    """)
+    try:
+        rows = db.execute(query, {"month_start": month_date, "user_id": current_user.UserID}).mappings().all()
+        return [dict(row) for row in rows]
+    except Exception:
+        raise HTTPException(status_code=500, detail="Apply the database migrations before using reconciliation")
+
+
+@app.post("/transfers", status_code=201)
+def create_transfer(
+    transfer_data: TransferCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_database)
+):
+    if transfer_data.SourceAccountID == transfer_data.DestinationAccountID:
+        raise HTTPException(status_code=400, detail="Source and destination accounts must differ")
+    account_ids = sorted([transfer_data.SourceAccountID, transfer_data.DestinationAccountID])
+    locked = db.query(Account).filter(
+        Account.AccountID.in_(account_ids),
+        Account.UserID == current_user.UserID,
+        Account.IsActive == True
+    ).order_by(Account.AccountID).with_for_update().all()
+    if len(locked) != 2:
+        raise HTTPException(status_code=404, detail="Both active accounts must belong to the current user")
+    source = next(a for a in locked if a.AccountID == transfer_data.SourceAccountID)
+    destination = next(a for a in locked if a.AccountID == transfer_data.DestinationAccountID)
+    if Decimal(str(source.Balance or 0)) < transfer_data.Amount:
+        raise HTTPException(status_code=400, detail="Insufficient account balance")
+    source.Balance = Decimal(str(source.Balance or 0)) - transfer_data.Amount
+    destination.Balance = Decimal(str(destination.Balance or 0)) + transfer_data.Amount
+    transfer = Transfer(UserID=current_user.UserID, SourceAccountID=source.AccountID, DestinationAccountID=destination.AccountID, Amount=transfer_data.Amount, Description=transfer_data.Description)
+    if transfer_data.TransferDate is not None:
+        transfer.TransferDate = transfer_data.TransferDate
+    try:
+        db.add(transfer)
+        db.commit()
+        db.refresh(transfer)
+        return {"TransferID": transfer.TransferID, "SourceAccountID": source.AccountID, "DestinationAccountID": destination.AccountID, "Amount": transfer.Amount, "source_balance": source.Balance, "destination_balance": destination.Balance}
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Could not complete transfer")
+
+
+@app.get("/accounts/{account_id}/reconciliation")
+def reconcile_account(
+    account_id: int,
+    month: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_database)
+):
+    account = get_owned_account(db, account_id, current_user.UserID)
+    try:
+        row = db.execute(text("CALL sp_reconcile_account_balance(:account_id, :user_id, :month)"), {"account_id": account_id, "user_id": current_user.UserID, "month": month}).mappings().first()
+        db.commit()
+        return dict(row) if row else {"AccountID": account_id, "Difference": None}
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Reconciliation requires the database migrations to be applied")
 
 
 @app.post("/transactions", status_code=201)
@@ -619,6 +816,11 @@ def create_transaction(
         db.add(new_transaction)
         db.commit()
         db.refresh(new_transaction)
+        category = db.query(Category).filter(Category.CategoryID == new_transaction.CategoryID).first()
+        upsert_transaction(new_transaction, current_user.UserID, category.CategoryName if category else None, account.AccountName)
+        if transaction_type == "EXPENSE":
+            create_budget_alerts(db, current_user.UserID, transaction_data.CategoryID, new_transaction.TransactionDate or datetime.now())
+            db.commit()
 
         return {
             "message": "Transaction created successfully",
@@ -716,6 +918,9 @@ def update_transaction(
     try:
         db.commit()
         db.refresh(transaction)
+        category = db.query(Category).filter(Category.CategoryID == transaction.CategoryID).first()
+        account = db.query(Account).filter(Account.AccountID == transaction.AccountID).first()
+        upsert_transaction(transaction, current_user.UserID, category.CategoryName if category else None, account.AccountName if account else None)
 
         return {
             "message": "Transaction updated successfully",
@@ -772,6 +977,7 @@ def delete_transaction(
     try:
         db.delete(transaction)
         db.commit()
+        mongo_delete_transaction(transaction_id, current_user.UserID)
 
         return {
             "message": "Transaction deleted successfully",
@@ -795,9 +1001,108 @@ def get_budgets(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_database)
 ):
-    return db.query(Budget).filter(
-        Budget.UserID == current_user.UserID
-    ).all()
+    budgets = (db.query(Budget, Category.CategoryName)
+               .join(Category, Budget.CategoryID == Category.CategoryID)
+               .filter(Budget.UserID == current_user.UserID)
+               .all())
+    response = []
+    for budget, category_name in budgets:
+        spent = db.query(func.coalesce(func.sum(Transaction.Amount), 0)).join(
+            Account, Transaction.AccountID == Account.AccountID
+        ).filter(
+            Account.UserID == current_user.UserID,
+            Transaction.CategoryID == budget.CategoryID,
+            Transaction.TransactionType == "EXPENSE",
+            Transaction.TransactionDate >= budget.StartDate,
+            Transaction.TransactionDate < datetime.combine(budget.EndDate, datetime.max.time()),
+        ).scalar()
+        response.append({
+            "BudgetID": budget.BudgetID,
+            "UserID": budget.UserID,
+            "CategoryID": budget.CategoryID,
+            "CategoryName": category_name,
+            "BudgetAmount": budget.BudgetAmount,
+            "BudgetPeriod": budget.BudgetPeriod,
+            "StartDate": budget.StartDate,
+            "EndDate": budget.EndDate,
+            "Spent": Decimal(str(spent or 0)),
+        })
+        # Backfill an alert when a user opens Budgets after an expense was
+        # recorded, including expenses created before alert monitoring existed.
+        create_budget_alerts(db, current_user.UserID, budget.CategoryID, datetime.now())
+    db.commit()
+    return response
+
+
+@app.post("/budgets", status_code=201)
+def create_budget(data: BudgetCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    if data.BudgetPeriod.upper() not in ("WEEKLY", "MONTHLY", "YEARLY") or data.EndDate < data.StartDate:
+        raise HTTPException(status_code=400, detail="Invalid budget period or dates")
+    get_owned_category(db, data.CategoryID, current_user.UserID, "EXPENSE")
+    budget = Budget(UserID=current_user.UserID, CategoryID=data.CategoryID, BudgetAmount=data.BudgetAmount, BudgetPeriod=data.BudgetPeriod.upper(), StartDate=data.StartDate, EndDate=data.EndDate)
+    db.add(budget)
+    try:
+        db.commit(); db.refresh(budget)
+        return budget
+    except Exception:
+        db.rollback(); raise HTTPException(status_code=500, detail="Could not create budget")
+
+
+@app.delete("/budgets/{budget_id}")
+def delete_budget(budget_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    budget = db.query(Budget).filter(Budget.BudgetID == budget_id, Budget.UserID == current_user.UserID).first()
+    if not budget: raise HTTPException(status_code=404, detail="Budget not found")
+    db.delete(budget); db.commit()
+    return {"message": "Budget deleted"}
+
+
+@app.get("/savings-goals")
+def get_savings_goals(current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    return db.query(SavingsGoal).filter(SavingsGoal.UserID == current_user.UserID).order_by(SavingsGoal.CreatedAt.desc()).all()
+
+
+@app.post("/savings-goals", status_code=201)
+def create_savings_goal(data: SavingsGoalCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    goal = SavingsGoal(UserID=current_user.UserID, GoalName=data.GoalName, TargetAmount=data.TargetAmount, Deadline=data.Deadline)
+    db.add(goal); db.commit(); db.refresh(goal)
+    return goal
+
+
+@app.post("/savings-goals/{goal_id}/contributions", status_code=201)
+def contribute_to_goal(goal_id: int, data: GoalContributionCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    goal = db.query(SavingsGoal).filter(SavingsGoal.GoalID == goal_id, SavingsGoal.UserID == current_user.UserID).with_for_update().first()
+    if not goal: raise HTTPException(status_code=404, detail="Savings goal not found")
+    contribution = GoalContribution(GoalID=goal.GoalID, UserID=current_user.UserID, Amount=data.Amount, Note=data.Note)
+    goal.CurrentAmount = Decimal(str(goal.CurrentAmount or 0)) + data.Amount
+    if goal.CurrentAmount >= goal.TargetAmount: goal.Status = "COMPLETED"
+    db.add(contribution); db.commit(); db.refresh(goal)
+    return goal
+
+
+@app.get("/recurring-transactions")
+def get_recurring_transactions(current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    return db.query(RecurringTransaction).filter(RecurringTransaction.UserID == current_user.UserID, RecurringTransaction.IsActive == True).all()
+
+
+@app.post("/recurring-transactions", status_code=201)
+def create_recurring_transaction(data: RecurringTransactionCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    transaction_type = data.TransactionType.upper()
+    frequency = data.Frequency.upper()
+    if transaction_type not in ("INCOME", "EXPENSE") or frequency not in ("WEEKLY", "MONTHLY", "YEARLY"):
+        raise HTTPException(status_code=400, detail="Invalid recurring transaction type or frequency")
+    get_owned_account(db, data.AccountID, current_user.UserID)
+    get_owned_category(db, data.CategoryID, current_user.UserID, transaction_type)
+    item = RecurringTransaction(UserID=current_user.UserID, AccountID=data.AccountID, CategoryID=data.CategoryID, Amount=data.Amount, TransactionType=transaction_type, Frequency=frequency, NextExecutionDate=data.NextExecutionDate, Description=data.Description, IsActive=True)
+    db.add(item); db.commit(); db.refresh(item)
+    return item
+
+
+@app.delete("/recurring-transactions/{recurring_id}")
+def delete_recurring_transaction(recurring_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    item = db.query(RecurringTransaction).filter(RecurringTransaction.RecurringTransactionID == recurring_id, RecurringTransaction.UserID == current_user.UserID, RecurringTransaction.IsActive == True).first()
+    if not item: raise HTTPException(status_code=404, detail="Recurring transaction not found")
+    item.IsActive = False; db.commit()
+    return {"message": "Recurring transaction deactivated"}
 
 
 # --------------------------------------------------
@@ -809,9 +1114,25 @@ def get_notifications(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_database)
 ):
+    mongo_items = mongo_list_notifications(current_user.UserID)
+    if mongo_items is not None:
+        return [{"NotificationID": str(item.get("_id", "")), "NotificationType": item.get("type"), "Message": item.get("message"), "IsRead": item.get("is_read", False), "CreatedAt": item.get("created_at")} for item in mongo_items]
     return db.query(Notification).filter(
         Notification.UserID == current_user.UserID
-    ).all()
+    ).order_by(Notification.CreatedAt.desc()).all()
+
+
+@app.patch("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_database)):
+    if mongo_enabled():
+        if mongo_mark_notification_read(current_user.UserID, str(notification_id)):
+            return {"message": "Notification marked as read"}
+    item = db.query(Notification).filter(Notification.NotificationID == notification_id, Notification.UserID == current_user.UserID).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    item.IsRead = True
+    db.commit()
+    return {"message": "Notification marked as read"}
 
 
 # --------------------------------------------------

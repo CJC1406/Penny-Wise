@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { getBudgets } from '@/services/api';
+import { router } from 'expo-router';
+import { createBudget, createCategory, deleteBudget, getBudgets, getCategories } from '@/services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import {
@@ -35,8 +36,13 @@ export default function BudgetsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [category, setCategory] = useState('Food');
   const [limit, setLimit] = useState('');
+  const [categoryIds, setCategoryIds] = useState<Record<string, number>>({});
 
-  React.useEffect(() => { getBudgets().then((items: any[]) => { if (items.length) setBudgets(items.map((b) => ({ id: b.BudgetID, category: String(b.CategoryID), limit: Number(b.BudgetAmount), spent: 0 }))); }).catch(() => undefined); }, []);
+  const loadBudgets = React.useCallback(() => Promise.all([getBudgets(), getCategories()]).then(([items, cats]: [any[], any[]]) => {
+    setCategoryIds(Object.fromEntries(cats.filter((c) => c.CategoryType === 'EXPENSE').map((c) => [c.CategoryName, c.CategoryID])));
+    setBudgets(items.map((b) => ({ id: b.BudgetID, category: b.CategoryName || String(b.CategoryID), limit: Number(b.BudgetAmount), spent: Number(b.Spent || 0) })));
+  }).catch(() => undefined), []);
+  React.useEffect(() => { loadBudgets(); }, [loadBudgets]);
 
   const totals = useMemo(() => {
     const budgeted = budgets.reduce((sum, item) => sum + item.limit, 0);
@@ -54,7 +60,7 @@ export default function BudgetsScreen() {
       maximumFractionDigits: 2,
     });
 
-  const addBudget = () => {
+  const addBudget = async () => {
     const amount = Number(limit);
 
     if (!limit.trim() || !Number.isFinite(amount) || amount <= 0) {
@@ -70,15 +76,21 @@ export default function BudgetsScreen() {
       return;
     }
 
-    setBudgets([
-      ...budgets,
-      {
-        id: Date.now(),
-        category,
-        limit: amount,
-        spent: 0,
-      },
-    ]);
+    let categoryId = categoryIds[category];
+    if (!categoryId) {
+      try {
+        const created: any = await createCategory({ CategoryName: category, CategoryType: 'EXPENSE' });
+        categoryId = created.CategoryID;
+        setCategoryIds((current) => ({ ...current, [category]: categoryId! }));
+      } catch (e) {
+        Alert.alert('Category unavailable', e instanceof Error ? e.message : 'Unable to create the expense category.');
+        return;
+      }
+    }
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    createBudget({ CategoryID: categoryId, BudgetAmount: amount, BudgetPeriod: 'MONTHLY', StartDate: start, EndDate: end }).then((b: any) => setBudgets(current => [...current, { id: b.BudgetID, category, limit: amount, spent: 0 }])).catch((e) => Alert.alert('Error', e.message));
 
     setLimit('');
     setCategory('Food');
@@ -92,7 +104,7 @@ export default function BudgetsScreen() {
         text: 'Remove',
         style: 'destructive',
         onPress: () =>
-          setBudgets((current) => current.filter((item) => item.id !== id)),
+          deleteBudget(id).then(() => setBudgets((current) => current.filter((item) => item.id !== id))).catch((e) => Alert.alert('Error', e.message)),
       },
     ]);
   };
@@ -109,9 +121,9 @@ export default function BudgetsScreen() {
           <Text style={styles.heading}>My Budgets</Text>
           <Text style={styles.subtitle}>Plan your spending and stay on track</Text>
         </View>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>C</Text>
-        </View>
+        <TouchableOpacity style={styles.avatar} onPress={() => router.push('/notifications')}>
+          <Text style={styles.avatarText}>🔔</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.summaryCard}>

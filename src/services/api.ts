@@ -129,16 +129,37 @@ export async function getCurrentUser() {
 }
 
 export type Account = { AccountID: number; AccountName: string; AccountType: string; Balance: number; Currency: string; IsActive: boolean };
-export type Transaction = { TransactionID: number; AccountID: number; CategoryID: number; Amount: number; TransactionType: "INCOME" | "EXPENSE"; Description?: string; TransactionDate?: string };
+export type Transaction = { TransactionID: number; AccountID: number; CategoryID: number; Amount: number; TransactionType: "INCOME" | "EXPENSE"; Description?: string; Merchant?: string; TransactionDate?: string };
 export type Category = { CategoryID: number; CategoryName: string; CategoryType: "INCOME" | "EXPENSE" };
 export const getAccounts = () => apiRequest<Account[]>("/accounts");
 export const createAccount = (data: { AccountName: string; AccountType: string; Currency?: string }) => apiRequest("/accounts", "POST", data);
 export const getTransactions = () => apiRequest<Transaction[]>("/transactions");
+export const searchTransactions = (filters: {
+  text?: string;
+  category_id?: number; account_id?: number; transaction_type?: "INCOME" | "EXPENSE";
+  start_date?: string; end_date?: string; min_amount?: number; max_amount?: number;
+}) => {
+  const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])).toString();
+  return apiRequest<{ transactions: Transaction[]; total: number; count: number }>(`/transactions?${query}`);
+};
+export type Notification = { NotificationID: number; NotificationType: string; Message: string; IsRead: boolean; CreatedAt?: string };
+export const getNotifications = () => apiRequest<Notification[]>("/notifications");
+export const markNotificationRead = (id: number | string) => apiRequest(`/notifications/${id}/read`, "PATCH");
 export const getCategories = () => apiRequest<Category[]>("/categories");
 export const createCategory = (data: { CategoryName: string; CategoryType: "INCOME" | "EXPENSE" }) => apiRequest<Category>("/categories", "POST", data);
 export const createTransaction = (data: Omit<Transaction, "TransactionID">) => apiRequest("/transactions", "POST", data);
+export const updateTransaction = (id: number, data: Partial<Omit<Transaction, "TransactionID">>) => apiRequest(`/transactions/${id}`, "PUT", data);
+export const deleteTransaction = (id: number) => apiRequest(`/transactions/${id}`, "DELETE");
+export const createTransfer = (data: { SourceAccountID: number; DestinationAccountID: number; Amount: number; Description?: string }) => apiRequest("/transfers", "POST", data);
 export const getBudgets = () => apiRequest<any[]>("/budgets");
+export const createBudget = (data: { CategoryID: number; BudgetAmount: number; BudgetPeriod: string; StartDate: string; EndDate: string }) => apiRequest("/budgets", "POST", data);
+export const deleteBudget = (id: number) => apiRequest(`/budgets/${id}`, "DELETE");
+export const getSavingsGoals = () => apiRequest<any[]>("/savings-goals");
+export const createSavingsGoal = (data: { GoalName: string; TargetAmount: number; Deadline?: string }) => apiRequest("/savings-goals", "POST", data);
+export const contributeToSavingsGoal = (id: number, data: { Amount: number; Note?: string }) => apiRequest(`/savings-goals/${id}/contributions`, "POST", data);
+export const getRecurringTransactions = () => apiRequest<any[]>("/recurring-transactions");
 export const getSummary = () => apiRequest<{balance: number; income: number; expenses: number; accounts: number}>("/summary");
+export const getReconciliation = (month: string) => apiRequest<any[]>(`/reconciliation?month=${encodeURIComponent(month)}`);
 
 // Check backend health
 export async function checkBackend() {

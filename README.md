@@ -7,6 +7,7 @@ PennyWise is a Personal Finance Management System developed as a DBMS lab projec
 - **Mobile App:** React Native, Expo, TypeScript
 - **Backend:** Python, FastAPI
 - **Database:** MySQL
+- **NoSQL:** MongoDB (notifications, activity-ready transaction search index)
 - **ORM:** SQLAlchemy
 - **Authentication:** JWT and Argon2 password hashing
 
@@ -56,6 +57,24 @@ mysql -u YOUR_MYSQL_USER -p PersonalFinanceDB < database/schema.sql
 For an existing database, do not re-import or recreate the schema. Back it up and
 apply the additive scripts in `database/migrations/` in order.
 
+Migration order:
+
+```text
+000_migration_tracking.sql
+001_add_opening_balance.sql
+002_finance_extensions.sql
+003_views_and_procedures.sql
+```
+
+The migration set preserves existing users, accounts, categories, transactions,
+budgets, notifications, and reports. Apply it only after taking a MySQL backup.
+
+To back up and apply all migrations automatically after MySQL is running:
+
+```bash
+python3 scripts/apply_migrations.py
+```
+
 4. Import the sample data after valid demo password hashes have been added:
 
 ```bash
@@ -76,6 +95,8 @@ Create a `.env` file in `backend/` with your own database connection and JWT sec
 ```env
 DATABASE_URL=mysql+pymysql://YOUR_USER:YOUR_PASSWORD@127.0.0.1:3306/PersonalFinanceDB
 JWT_SECRET=YOUR_LONG_RANDOM_SECRET
+MONGODB_URL=mongodb://127.0.0.1:27017
+MONGODB_DATABASE=pennywise
 ```
 
 Start the backend:

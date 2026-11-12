@@ -3,6 +3,7 @@ import { StatusBar } from 'react-native';
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { getTransactions } from '@/services/api';
+import { useFocusEffect } from 'expo-router';
 
 const money = (value: number) =>
   '₹' + value.toLocaleString('en-IN');
@@ -10,10 +11,16 @@ const money = (value: number) =>
 export default function AnalyticsScreen() {
   const [expenses, setExpenses] = React.useState<{name: string; amount: number; color: string}[]>([]);
   const [income, setIncome] = React.useState(0);
-  React.useEffect(() => { getTransactions().then((items) => { setIncome(items.filter((x) => x.TransactionType === 'INCOME').reduce((s, x) => s + Number(x.Amount), 0)); setExpenses(items.filter((x) => x.TransactionType === 'EXPENSE').map((x) => ({ name: x.Description || 'Expense', amount: Number(x.Amount), color: '#268653' }))); }).catch(() => undefined); }, []);
+  const refreshAnalytics = React.useCallback(() => {
+    getTransactions().then((items) => {
+      setIncome(items.filter((x) => x.TransactionType === 'INCOME').reduce((s, x) => s + Number(x.Amount), 0));
+      setExpenses(items.filter((x) => x.TransactionType === 'EXPENSE').map((x) => ({ name: x.Description || 'Expense', amount: Number(x.Amount), color: '#268653' })));
+    }).catch(() => undefined);
+  }, []);
+  useFocusEffect(React.useCallback(() => { refreshAnalytics(); }, [refreshAnalytics]));
   const totalExpenses = expenses.reduce((sum, item) => sum + item.amount, 0);
   const savings = income - totalExpenses;
-  const maxExpense = Math.max(...expenses.map(item => item.amount));
+  const largestExpense = expenses.reduce<{name: string; amount: number} | null>((largest, item) => !largest || item.amount > largest.amount ? item : largest, null);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7F5' }} edges={['top']}>
@@ -86,14 +93,14 @@ export default function AnalyticsScreen() {
         <View style={styles.overviewRow}>
           <Text style={styles.overviewLabel}>Savings rate</Text>
           <Text style={styles.overviewValue}>
-            {((savings / income) * 100).toFixed(1)}%
+            {income > 0 ? ((savings / income) * 100).toFixed(1) : '0.0'}%
           </Text>
         </View>
 
         <View style={styles.overviewRow}>
           <Text style={styles.overviewLabel}>Largest expense</Text>
           <Text style={styles.overviewValue}>
-            {expenses.reduce((a, b) => a.amount > b.amount ? a : b).name}
+            {largestExpense?.name || 'No expenses'}
           </Text>
         </View>
 
@@ -103,9 +110,7 @@ export default function AnalyticsScreen() {
         </View>
       </View>
 
-      <Text style={styles.footer}>
-        Sample analytics • MySQL integration comes later
-      </Text>
+      <Text style={styles.footer}>Live analytics from your recorded transactions</Text>
     </ScrollView>
     </SafeAreaView>
   );

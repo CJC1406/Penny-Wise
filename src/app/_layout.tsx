@@ -32,6 +32,9 @@ export default function RootLayout() {
           <Stack.Screen name="budgets" />
           <Stack.Screen name="analytics" />
           <Stack.Screen name="profile" />
+          <Stack.Screen name="reconciliation" />
+          <Stack.Screen name="notifications" />
+          <Stack.Screen name="search" />
         </Stack>
       </ThemeProvider>
     </SafeAreaProvider>
